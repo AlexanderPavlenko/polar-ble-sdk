@@ -4,6 +4,7 @@ import Foundation
 import PolarBleSdk
 import RxSwift
 import CoreBluetooth
+import SwiftOSC
 
 /// PolarBleSdkManager demonstrates how to user PolarBleSDK API
 class PolarBleSdkManager : ObservableObject {
@@ -12,7 +13,7 @@ class PolarBleSdkManager : ObservableObject {
     private var api = PolarBleApiDefaultImpl.polarImplementation(DispatchQueue.main, features: Features.allFeatures.rawValue)
     
     // TODO replace the device id with your device ID or use the auto connect to when connecting to device
-    private var deviceId = "8C4CAD2D"
+    private var deviceId = "94B56D2A"
     
     @Published private(set) var isBluetoothOn: Bool
     @Published private(set) var isBroadcastListenOn: Bool = false
@@ -54,6 +55,9 @@ class PolarBleSdkManager : ObservableObject {
     private var ppiDisposable: Disposable?
     private let disposeBag = DisposeBag()
     private var exerciseEntry: PolarExerciseEntry?
+    
+    // private var oscClient = OSCClient(address: "127.0.0.1", port: 7001) // miRack
+    private var oscClient = OSCClient(address: "172.20.10.15", port: 8000) // USB
     
     init() {
         self.isBluetoothOn = api.isBlePowered
@@ -252,6 +256,15 @@ class PolarBleSdkManager : ObservableObject {
                     switch e {
                     case .next(let data):
                         for µv in data.samples {
+                            let ecg = Int("\(µv)") ?? 0
+                            let ecg_f = Float(µv) / 1000
+                            let bundle = OSCBundle(
+                                Timetag(secondsSinceNow: 0),
+                                OSCMessage(OSCAddressPattern("/ecg"), ecg),
+                                OSCMessage(OSCAddressPattern("/ecg_f"), ecg_f)
+                            )
+                            self.oscClient.send(bundle)
+                            
                             NSLog("ECG    µV: \(µv)")
                         }
                     case .error(let err):
@@ -664,6 +677,15 @@ extension PolarBleSdkManager : PolarBleApiSdkModeFeatureObserver {
 // MARK: - PolarBleApiDeviceHrObserver
 extension PolarBleSdkManager : PolarBleApiDeviceHrObserver {
     func hrValueReceived(_ identifier: String, data: PolarHrData) {
+        let hr = Int("\(data.hr)") ?? 0
+        let hr_f = Float(hr) / 250
+        let bundle = OSCBundle(
+            Timetag(secondsSinceNow: 0),
+            OSCMessage(OSCAddressPattern("/hr"), hr),
+            OSCMessage(OSCAddressPattern("/hr_f"), hr_f)
+        )
+        oscClient.send(bundle)
+        
         NSLog("(\(identifier)) HR value: \(data.hr) rrsMs: \(data.rrsMs) rrs: \(data.rrs) contact: \(data.contact) contact supported: \(data.contactSupported)")
     }
 }
