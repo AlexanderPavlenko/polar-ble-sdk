@@ -100,18 +100,22 @@ class HRActivity : AppCompatActivity(), PlotterListener {
                 textViewBattery.append(batteryLevelText)
             }
 
+            @Deprecated("Please use the startHrStreaming API to get the heart rate data ")
             override fun hrNotificationReceived(identifier: String, data: PolarHrData.PolarHrSample) {
                 //deprecated
             }
 
+            @Deprecated("Not supported anymore, won't be ever called. Use the bleSdkFeatureReady")
             override fun polarFtpFeatureReady(identifier: String) {
                 //deprecated
             }
 
+            @Deprecated("The functionality has changed. Please use the bleSdkFeatureReady to know if onlineStreaming is available and the getAvailableOnlineStreamDataTypes function know which data types are supported")
             override fun streamingFeaturesReady(identifier: String, features: Set<PolarBleApi.PolarDeviceDataType>) {
                 //deprecated
             }
 
+            @Deprecated("Information whether HR feature is available is provided by bleSdkFeatureReady")
             override fun hrFeatureReady(identifier: String) {
                 //deprecated
             }

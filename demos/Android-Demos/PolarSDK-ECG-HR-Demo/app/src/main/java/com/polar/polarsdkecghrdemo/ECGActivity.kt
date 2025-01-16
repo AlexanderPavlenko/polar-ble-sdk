@@ -1,5 +1,8 @@
 package com.polar.polarsdkecghrdemo
 
+import android.media.AudioFormat
+import android.media.AudioManager
+import android.media.AudioTrack
 import android.os.Bundle
 import android.util.Log
 import android.widget.TextView
@@ -19,6 +22,10 @@ import com.polar.sdk.api.model.PolarSensorSetting
 import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
 import io.reactivex.rxjava3.disposables.Disposable
 import java.util.*
+import kotlin.math.pow
+//import kotlin.math.pow
+import kotlin.math.sin
+
 
 class ECGActivity : AppCompatActivity(), PlotterListener {
     companion object {
@@ -41,7 +48,8 @@ class ECGActivity : AppCompatActivity(), PlotterListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_ecg)
-        deviceId = intent.getStringExtra("id") ?: throw Exception("ECGActivity couldn't be created, no deviceId given")
+        deviceId = intent.getStringExtra("id")
+            ?: throw Exception("ECGActivity couldn't be created, no deviceId given")
         textViewHR = findViewById(R.id.hr)
         textViewRR = findViewById(R.id.rr)
         textViewDeviceId = findViewById(R.id.deviceId)
@@ -75,7 +83,10 @@ class ECGActivity : AppCompatActivity(), PlotterListener {
                 Log.d(TAG, "Device disconnected ${polarDeviceInfo.deviceId}")
             }
 
-            override fun bleSdkFeatureReady(identifier: String, feature: PolarBleApi.PolarBleSdkFeature) {
+            override fun bleSdkFeatureReady(
+                identifier: String,
+                feature: PolarBleApi.PolarBleSdkFeature
+            ) {
                 Log.d(TAG, "feature ready $feature")
 
                 when (feature) {
@@ -83,6 +94,7 @@ class ECGActivity : AppCompatActivity(), PlotterListener {
                         streamECG()
                         streamHR()
                     }
+
                     else -> {}
                 }
             }
@@ -101,18 +113,28 @@ class ECGActivity : AppCompatActivity(), PlotterListener {
                 textViewBattery.append(batteryLevelText)
             }
 
-            override fun hrNotificationReceived(identifier: String, data: PolarHrData.PolarHrSample) {
+            @Deprecated("Please use the startHrStreaming API to get the heart rate data ")
+            override fun hrNotificationReceived(
+                identifier: String,
+                data: PolarHrData.PolarHrSample
+            ) {
                 // deprecated
             }
 
+            @Deprecated("Not supported anymore, won't be ever called. Use the bleSdkFeatureReady")
             override fun polarFtpFeatureReady(identifier: String) {
                 // deprecated
             }
 
-            override fun streamingFeaturesReady(identifier: String, features: Set<PolarBleApi.PolarDeviceDataType>) {
+            @Deprecated("The functionality has changed. Please use the bleSdkFeatureReady to know if onlineStreaming is available and the getAvailableOnlineStreamDataTypes function know which data types are supported")
+            override fun streamingFeaturesReady(
+                identifier: String,
+                features: Set<PolarBleApi.PolarDeviceDataType>
+            ) {
                 // deprecated
             }
 
+            @Deprecated("Information whether HR feature is available is provided by bleSdkFeatureReady")
             override fun hrFeatureReady(identifier: String) {
                 // deprecated
             }
@@ -146,17 +168,89 @@ class ECGActivity : AppCompatActivity(), PlotterListener {
     }
 
     fun streamECG() {
+        val sampleRate = 22050 // Hz
+        val samplesPerData = sampleRate / 130 // Polar H10 ECG at 130 Hz
+        val buffer = ShortArray(sampleRate * 3)
+        val audioTrack = AudioTrack(
+            AudioManager.STREAM_MUSIC, sampleRate, AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT, sampleRate * 10, AudioTrack.MODE_STREAM
+        )
+        var audioPlayDelay = 0
+        val twoPi = 2.0 * Math.PI
+
+        //var carrierPhase = 0.0
+        //val carrierFreq = 55
+
         val isDisposed = ecgDisposable?.isDisposed ?: true
         if (isDisposed) {
+            var sampleIndex = 0
             ecgDisposable = api.requestStreamSettings(deviceId, PolarBleApi.PolarDeviceDataType.ECG)
                 .toFlowable()
-                .flatMap { sensorSetting: PolarSensorSetting -> api.startEcgStreaming(deviceId, sensorSetting.maxSettings()) }
+                .flatMap { sensorSetting: PolarSensorSetting ->
+                    api.startEcgStreaming(
+                        deviceId,
+                        sensorSetting.maxSettings()
+                    )
+                }
                 .observeOn(AndroidSchedulers.mainThread())
                 .subscribe(
                     { polarEcgData: PolarEcgData ->
-                        Log.d(TAG, "ecg update")
+
+
+//                        var bufferIndex = 0
+//                        for (data in polarEcgData.samples) {
+//                            var volts = data.voltage / 1000.0
+//                            ecgPlotter.sendSingleSample(volts.toFloat())
+//                            volts += 0.5
+//                            if (volts > 2) {
+//                                volts = 2.0
+//                            }
+//                            if (volts < 0) {
+//                                volts = 0.0
+//                            }
+//                            val modulationFreq = 440 * 2.0.pow(volts)
+//                            for (i in 0 until samplesPerData) {
+//                                val modulator =
+//                                    sin(twoPi * modulationFreq * sampleIndex / sampleRate)
+//                                carrierPhase += twoPi * carrierFreq / sampleRate + 0.5 * modulator
+//                                val sample = sin(carrierPhase)
+//                                buffer[bufferIndex] = (sample * Short.MAX_VALUE).toInt().toShort()
+//                                bufferIndex += 1
+//                                sampleIndex += 1
+//                            }
+//                        }
+//                        audioTrack.write(buffer, 0, bufferIndex);
+//                        if (audioPlayDelay <= 0) {
+//                            audioTrack.play()
+//                        } else {
+//                            audioPlayDelay -= 1
+//                        }
+
+
+                        var bufferIndex = 0
                         for (data in polarEcgData.samples) {
-                            ecgPlotter.sendSingleSample((data.voltage.toFloat() / 1000.0).toFloat())
+                            var volts = data.voltage / 1000.0
+                            // ecgPlotter.sendSingleSample(volts.toFloat())
+                            volts += 0.5
+                            if (volts > 2) {
+                                volts = 2.0
+                            }
+                            if (volts < 0) {
+                                volts = 0.0
+                            }
+                            val tone = 880 * 2.0.pow(volts)
+                            for (i in 0 until samplesPerData) {
+                                val sample = sin(twoPi * sampleIndex * tone / sampleRate)
+                                buffer[bufferIndex] = (sample * Short.MAX_VALUE).toInt().toShort()
+                                bufferIndex += 1
+                                sampleIndex += 1
+                            }
+                        }
+                        audioTrack.write(buffer, 0, bufferIndex)
+                        if (audioPlayDelay <= 0) {
+                            audioTrack.play()
+                        } else {
+                            audioPlayDelay -= 1
                         }
                     },
                     { error: Throwable ->
@@ -171,6 +265,8 @@ class ECGActivity : AppCompatActivity(), PlotterListener {
             // NOTE stops streaming if it is "running"
             ecgDisposable?.dispose()
             ecgDisposable = null
+            audioTrack.pause()
+            audioTrack.release()
         }
     }
 
